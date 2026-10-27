@@ -1,0 +1,28 @@
+name: wayback-save
+on:
+  workflow_dispatch:
+    inputs:
+      urls:
+        description: "Public URLs to archive, separated by spaces"
+        required: true
+jobs:
+  save:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Save Page Now for each URL (from GitHub's egress address)
+        shell: bash
+        run: |
+          for u in ${{ github.event.inputs.urls }}; do
+            for try in 1 2 3; do
+              code=$(curl -s -o /dev/null -m 120 -A 'Mozilla/5.0 (X11; Linux x86_64)' -w '%{http_code}' -X POST "https://web.archive.org/save/$u")
+              echo "SAVE $u try$try HTTP $code"
+              [ "$code" = 200 ] && break
+              sleep 60
+            done
+            sleep 20
+          done
+          echo "waiting 120 s for the index"; sleep 120
+          for u in ${{ github.event.inputs.urls }}; do
+            r=$(curl -s -m 30 "https://archive.org/wayback/available?url=$u&timestamp=20261028")
+            echo "AVAIL $u $r"
+          done
