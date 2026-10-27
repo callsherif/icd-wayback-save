@@ -9,30 +9,21 @@ jobs:
   save:
     runs-on: ubuntu-latest
     steps:
-      - name: Save Page Now, then follow each capture job to its result
+      - name: Save Page Now (GET the save address and follow it to the new snapshot), then confirm in the index
         shell: bash
         run: |
           set +e
-          declare -A JOB
+          UA='Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36'
           for u in ${{ github.event.inputs.urls }}; do
-            body=$(curl -s -m 120 -A 'Mozilla/5.0 (X11; Linux x86_64)' -H 'Accept: application/json' -w '\nHTTP %{http_code}' -X POST "https://web.archive.org/save/" --data-urlencode "url=$u" --data-urlencode "capture_all=on")
-            code=$(printf '%s' "$body" | tail -1)
-            job=$(printf '%s' "$body" | grep -oE '"job_id": ?"[^"]+"' | head -1 | cut -d'"' -f4)
-            echo "SAVE $u $code job=${job:-none}"
-            echo "BODY $u $(printf '%s' "$body" | head -c 300 | tr '\n' ' ')"
-            [ -n "$job" ] && JOB[$u]=$job
-            sleep 15
-          done
-          for i in $(seq 1 16); do
-            sleep 15; left=0
-            for u in "${!JOB[@]}"; do
-              st=$(curl -s -m 30 -H 'Accept: application/json' "https://web.archive.org/save/status/${JOB[$u]}")
-              s=$(printf '%s' "$st" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('status'), d.get('timestamp',''), d.get('status_ext',''), (d.get('message') or '')[:120])" 2>/dev/null || echo unparsable)
-              echo "STATUS $u $s"; case "$s" in pending*) left=$((left+1));; esac
+            for try in 1 2 3; do
+              final=$(curl -s -L -m 180 -A "$UA" -o /dev/null -w '%{http_code} %{url_effective}' "https://web.archive.org/save/$u")
+              echo "SAVE $u try$try $final"
+              case "$final" in "200 https://web.archive.org/web/"*) break;; esac
+              sleep 60
             done
-            [ $left -eq 0 ] && break
+            sleep 10
           done
+          sleep 60
           for u in ${{ github.event.inputs.urls }}; do
-            echo "CDX $u $(curl -s -m 30 "https://web.archive.org/cdx/search/cdx?url=$u&from=20261027&fl=timestamp,statuscode&limit=5" | tr '\n' ' ')"
             echo "AVAIL $u $(curl -s -m 30 "https://archive.org/wayback/available?url=$u&timestamp=20261028" | grep -oE '"timestamp": ?"[0-9]{14}"|archived_snapshots": ?\{\}' | head -1)"
           done
