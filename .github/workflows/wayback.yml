@@ -15,18 +15,18 @@ jobs:
           set +e
           declare -A JOB
           for u in ${{ github.event.inputs.urls }}; do
-            body=$(curl -s -m 120 -A 'Mozilla/5.0 (X11; Linux x86_64)' -w '\nHTTP %{http_code}' -X POST "https://web.archive.org/save/$u")
+            body=$(curl -s -m 120 -A 'Mozilla/5.0 (X11; Linux x86_64)' -H 'Accept: application/json' -w '\nHTTP %{http_code}' -X POST "https://web.archive.org/save/" --data-urlencode "url=$u" --data-urlencode "capture_all=on")
             code=$(printf '%s' "$body" | tail -1)
-            job=$(printf '%s' "$body" | grep -oE 'spn\.watchJob\("[^"]+"' | head -1 | cut -d'"' -f2)
+            job=$(printf '%s' "$body" | grep -oE '"job_id": ?"[^"]+"' | head -1 | cut -d'"' -f4)
             echo "SAVE $u $code job=${job:-none}"
-            echo "BODY $u $(printf '%s' "$body" | sed -E 's/<[^>]+>/ /g' | tr -s ' \n' ' ' | head -c 500)"
+            echo "BODY $u $(printf '%s' "$body" | head -c 300 | tr '\n' ' ')"
             [ -n "$job" ] && JOB[$u]=$job
             sleep 15
           done
           for i in $(seq 1 16); do
             sleep 15; left=0
             for u in "${!JOB[@]}"; do
-              st=$(curl -s -m 30 "https://web.archive.org/save/status/${JOB[$u]}")
+              st=$(curl -s -m 30 -H 'Accept: application/json' "https://web.archive.org/save/status/${JOB[$u]}")
               s=$(printf '%s' "$st" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('status'), d.get('timestamp',''), d.get('status_ext',''), (d.get('message') or '')[:120])" 2>/dev/null || echo unparsable)
               echo "STATUS $u $s"; case "$s" in pending*) left=$((left+1));; esac
             done
