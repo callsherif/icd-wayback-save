@@ -25,10 +25,7 @@ jobs:
             sleep 15; left=0
             for u in "${!JOB[@]}"; do
               st=$(curl -s -m 30 "https://web.archive.org/save/status/${JOB[$u]}")
-              s=$(printf '%s' "$st" | python3 -c 'import sys,json
-try:
-  d=json.load(sys.stdin); print(d.get("status"), d.get("timestamp",""), d.get("status_ext",""), (d.get("message") or "")[:120])
-except Exception: print("unparsable")')
+              s=$(printf '%s' "$st" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('status'), d.get('timestamp',''), d.get('status_ext',''), (d.get('message') or '')[:120])" 2>/dev/null || echo unparsable)
               echo "STATUS $u $s"; case "$s" in pending*) left=$((left+1));; esac
             done
             [ $left -eq 0 ] && break
